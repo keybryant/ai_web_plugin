@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Web SDK 示例 - 快速接入 AI</title>
+  <style>
+    body { font-family: "Microsoft YaHei", sans-serif; max-width: 720px; margin: 24px auto; padding: 0 16px; }
+    h1 { font-size: 1.4em; }
+    .block { margin: 16px 0; }
+    label { display: block; margin-bottom: 4px; font-weight: bold; }
+    input[type="text"], textarea { width: 100%; padding: 8px; box-sizing: border-box; }
+    textarea { min-height: 80px; }
+    button { padding: 8px 16px; cursor: pointer; margin-right: 8px; }
+    .result { margin-top: 12px; padding: 12px; background: #f0f0f0; border-radius: 6px; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <h1>AI Web SDK 示例</h1>
+  <p>用户自己传入 prompt 内容，收到返回后在回调里自行处理显示。</p>
+
+  <div class="block">
+    <label>输入内容（由你在调用时传入 SDK）：</label>
+    <input type="text" id="promptInput" value="帮我搜索手机" placeholder="输入内容" />
+  </div>
+
+  <div class="block">
+    <button onclick="handleSearch()">触发 searchGoods（使用上下文）</button>
+    <button onclick="handleSearchNoContext()">触发 searchGoods（本次不用上下文）</button>
+  </div>
+
+  <div class="block">
+    <label>返回内容（在回调里写入此处）：</label>
+    <div id="resultContainer" class="result">（结果将显示在这里）</div>
+  </div>
+
+  <div class="block">
+    <button onclick="console.log(sdk.getContext('searchGoods')); alert('上下文已输出到控制台');">查看 searchGoods 上下文</button>
+    <button onclick="sdk.clearContext('searchGoods'); document.getElementById('resultContainer').textContent='（已清空上下文）';">清空 searchGoods 上下文</button>
+  </div>
+
+  <script src="../src/ai-web-sdk.js"></script>
+  <script src="api-adapter-example.js"></script>
+  <script>
+    var sdk = window.AIWebSDK;
+    window.sdk = sdk;
+
+    sdk.setApiAdapter(AIWebSDKAdapters.createLocalChatAdapter({
+      apiUrl: 'http://localhost:8080/aiProject/api/llm/chat',
+      maxTokens: 2048,
+      temperature: 0.7
+    }));
+
+    // 注册方法：不绑定输入/输出元素，只配置可选的处理层和默认回调
+    sdk.register('searchGoods', {
+      promptProcessor: function (rawContent, methodName, config) {
+        return '【商品搜索】用户说：' + rawContent;
+      },
+      useContext: 1
+    });
+
+    // 调用时：自己取输入框内容传入，在 callback 里自己决定显示到哪里
+    function handleSearch() {
+      var prompt = document.getElementById('promptInput').value.trim();
+      var resultEl = document.getElementById('resultContainer');
+      resultEl.textContent = '请求中...';
+      sdk.searchGoods({
+        prompt: prompt,
+        callback: function (content) {
+          resultEl.textContent = content;
+        }
+      }).catch(function (err) {
+        resultEl.textContent = '请求失败: ' + (err && err.message ? err.message : err);
+      });
+    }
+
+    function handleSearchNoContext() {
+      var prompt = document.getElementById('promptInput').value.trim();
+      var resultEl = document.getElementById('resultContainer');
+      resultEl.textContent = '请求中...';
+      sdk.searchGoods({
+        prompt: prompt,
+        useContext: 0,
+        callback: function (content) {
+          resultEl.textContent = content;
+        }
+      }).catch(function (err) {
+        resultEl.textContent = '请求失败: ' + (err && err.message ? err.message : err);
+      });
+    }
+  </script>
+</body>
+</html>

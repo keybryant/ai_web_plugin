@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>表单助手示例 - AI Web SDK</title>
+  <style>
+    body { font-family: "Microsoft YaHei", sans-serif; max-width: 640px; margin: 24px auto; padding: 0 16px; }
+    h1 { font-size: 1.3em; }
+    .block { margin: 16px 0; }
+    label { display: block; margin-bottom: 4px; font-weight: bold; }
+    input, select, textarea { width: 100%; padding: 8px; box-sizing: border-box; margin-bottom: 8px; }
+    .result { margin-top: 12px; padding: 12px; background: #f0f0f0; border-radius: 6px; white-space: pre-wrap; }
+    button { padding: 8px 16px; cursor: pointer; margin-right: 8px; }
+    .tip { color: #666; font-size: 0.85em; margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <h1>表单助手示例</h1>
+  <p>表单用 <code>data-ai-form</code> / <code>data-ai-form-desc</code> 区分；字段用 <code>data-ai-field</code> / <code>data-ai-field-desc</code> 区分。<strong>输出内容的元素若带 data-ai-field，即表示要 AI 补充的字段</strong>，SDK 会在 prompt 中告知 AI，无需另外指定。</p>
+
+  <!-- 表单：用 data-ai-form 做标签，data-ai-form-desc 做描述 -->
+  <div class="block" data-ai-form="orderForm" data-ai-form-desc="订单信息表单，用于收集客户与商品信息">
+    <label>表单区域（data-ai-form="orderForm"）</label>
+    <div class="tip">下方输入框均带 data-ai-field 与 data-ai-field-desc</div>
+
+    <label>客户姓名</label>
+    <input type="text" data-ai-field="customerName" data-ai-field-desc="客户姓名" placeholder="请输入姓名" value="张三" />
+
+    <label>手机号</label>
+    <input type="text" data-ai-field="phone" data-ai-field-desc="手机号" placeholder="请输入手机号" value="13800138000" />
+
+    <label>商品名称</label>
+    <input type="text" data-ai-field="goodsName" data-ai-field-desc="商品名称" placeholder="请输入商品" value="手机" />
+
+    <label>数量</label>
+    <input type="number" data-ai-field="quantity" data-ai-field-desc="数量" value="2" />
+
+    <label>备注（可手填或留空，由下方「AI 补充」生成）</label>
+    <textarea data-ai-field="remarkInput" data-ai-field-desc="备注输入" placeholder="选填">尽快发货</textarea>
+  </div>
+
+  <div class="block">
+    <button onclick="handleFormAssistant()">调用表单助手（AI 补充「备注」字段）</button>
+  </div>
+
+  <div class="block">
+    <label>备注（由 AI 补充，输出元素带 data-ai-field 即表示要补充的字段）：</label>
+    <div id="formAssistantResult" class="result" data-ai-field="remark" data-ai-field-desc="备注">（AI 将根据表单内容生成备注并显示在这里）</div>
+  </div>
+
+  <script src="../src/ai-web-sdk.js"></script>
+  <script src="api-adapter-example.js"></script>
+  <script>
+    var sdk = window.AIWebSDK;
+
+    sdk.setApiAdapter(AIWebSDKAdapters.createLocalChatAdapter({
+      apiUrl: 'http://localhost:8080/aiProject/api/llm/chat',
+      maxTokens: 2048,
+      temperature: 0.7
+    }));
+
+    // 可选：为表单助手注册方法，自定义 prompt 处理或上下文
+    sdk.register('formAssistant', {
+      promptProcessor: function (raw) {
+        return '【表单助手】\n\n' + raw;
+      },
+      useContext: 0
+    });
+
+    function handleFormAssistant() {
+      sdk.runFormAssistant('orderForm', {
+        outputElementId: 'formAssistantResult',
+        promptInstruction: ''
+      });
+    }
+  </script>
+</body>
+</html>
