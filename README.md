@@ -55,13 +55,51 @@ sdk.searchGoods({
 | `promptProcessor` | `function(rawContent, methodName, config)` | 可选，对用户传入的 prompt 做加工 |
 | `callback` | `function(content, methodName, config)` | 可选，可在此统一处理返回，也可在每次调用时传入 |
 | `useContext` | `0 \| 1` | 该方法是否使用上下文，默认 1 |
+| `systemPrompt` | `string` | 可选，系统提示，**每次请求都会放在消息最前面**提交 |
+| `responseFormat` | `string` | 可选，要求返回的格式（如 `"json"`），会拼入 systemPrompt |
+| `responseFormatExample` | `string` | 可选，返回格式的样例，会拼入 systemPrompt |
+| `functions` | `Object \| Array` | 可选，函数列表，会拼入 systemPrompt。对象格式：`{ 方法名: { name, description } }`；数组格式：`[{ name, description }, ...]` |
 
 ## 调用方式（sdk.methodName）
 
 - **传字符串**：`sdk.searchGoods('你好')`，prompt 即为 `'你好'`
-- **传对象**：`sdk.searchGoods({ prompt: '...', callback?, useContext? })`，本次可覆盖 callback、useContext
+- **传对象**：`sdk.searchGoods({ prompt: '...', callback?, useContext?, systemPrompt?, responseFormat?, responseFormatExample?, functions? })`，本次可覆盖 callback、useContext 以及上述与 system 相关的选项
 
 返回值为 `Promise<string>`，也可在 callback 中处理内容。
+
+### 系统提示与返回格式（systemPrompt / responseFormat / functions）
+
+可在**注册时**或**每次调用时**指定 `systemPrompt`、`responseFormat`、`responseFormatExample`、`functions`。若指定，会拼成一条系统提示，**每次请求都会作为第一条消息（role: system）放在最前面**提交。
+
+- **systemPrompt**：系统角色说明，如「你是一个商品搜索助手」。
+- **responseFormat**：要求返回格式，如 `"json"`，会追加「请严格按照以下格式返回：xxx」。
+- **responseFormatExample**：返回格式样例，会追加「返回格式样例：...」。
+- **functions**：函数列表，格式为对象 `{ 方法名: { name, description } }` 或数组 `[{ name, description }, ...]`，会追加「可用函数列表」说明。
+
+示例（注册时配置）：
+
+```javascript
+sdk.register('searchGoods', {
+  systemPrompt: '你是一个商品搜索助手，只返回与商品相关的信息。',
+  responseFormat: 'json',
+  responseFormatExample: '{"items": [{"name": "xxx", "price": 99}]}',
+  functions: {
+    addToCart: { name: 'addToCart', description: '将商品加入购物车' },
+    getDetail: { name: 'getDetail', description: '获取商品详情' }
+  }
+})
+```
+
+示例（调用时传入，本次生效）：
+
+```javascript
+sdk.searchGoods({
+  prompt: '手机',
+  systemPrompt: '只返回 JSON。',
+  responseFormat: 'json',
+  responseFormatExample: '{"list": []}'
+})
+```
 
 ## API
 
@@ -70,7 +108,7 @@ sdk.searchGoods({
 - `sdk.setDefaultUseContext(0|1)`：设置默认是否使用上下文
 - `sdk.getContext(methodName?)`：获取某方法或全部上下文
 - `sdk.clearContext(methodName?)`：清空某方法或全部上下文
-- `sdk[methodName](promptOrOptions)`：执行已注册方法，传入 prompt 字符串或 `{ prompt, callback?, useContext? }`
+- `sdk[methodName](promptOrOptions)`：执行已注册方法，传入 prompt 字符串或 `{ prompt, callback?, useContext?, systemPrompt?, responseFormat?, responseFormatExample?, functions? }`
 - `sdk.runFormAssistant(formTag, options)`：表单助手，见下文
 - `sdk.getFormData(formTag)`：根据表单标签获取表单数据（仅读）
 - `sdk.buildFormPrompt(formData, promptInstruction, supplementFieldTags?)`：将表单数据与要求拼成 prompt 字符串（仅读）
@@ -103,3 +141,4 @@ sdk.runFormAssistant('orderForm', {
 
 - **examples/index.html**：用户从输入框取值作为 prompt 传入，在 callback 里写入结果容器。
 - **examples/form-assistant.html**：表单助手：带 `data-ai-form` / `data-ai-field` 的表单，按钮触发后拼成 prompt 并输出到指定元素。
+- **examples/system-prompt-demo.html**：systemPrompt / 返回格式 / 格式样例 / 函数列表：可填写系统提示、返回格式（如 json）、格式样例、函数列表，发送后每次请求都会拼成 system 消息放在最前面；支持 Mock 适配器预览，或切换本地接口实测。

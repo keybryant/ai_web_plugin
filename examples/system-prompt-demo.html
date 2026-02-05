@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Web SDK 示例 - systemPrompt / 返回格式 / 函数列表</title>
+  <style>
+    body { font-family: "Microsoft YaHei", sans-serif; max-width: 720px; margin: 24px auto; padding: 0 16px; }
+    h1 { font-size: 1.4em; }
+    h2 { font-size: 1.1em; margin-top: 20px; color: #333; }
+    .block { margin: 16px 0; }
+    label { display: block; margin-bottom: 4px; font-weight: bold; }
+    input[type="text"], textarea { width: 100%; padding: 8px; box-sizing: border-box; }
+    textarea { min-height: 60px; font-family: Consolas, monospace; font-size: 13px; }
+    button { padding: 8px 16px; cursor: pointer; margin-right: 8px; margin-bottom: 8px; }
+    .result { margin-top: 12px; padding: 12px; background: #f0f0f0; border-radius: 6px; white-space: pre-wrap; word-break: break-all; }
+    .hint { font-size: 12px; color: #666; margin-top: 4px; }
+    .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    select { padding: 6px 10px; }
+  </style>
+</head>
+<body>
+  <h1>systemPrompt / 返回格式 / 函数列表 示例</h1>
+  <p>可指定<strong>系统提示</strong>、<strong>返回格式</strong>（如 json）、<strong>格式样例</strong>、<strong>函数列表</strong>，每次请求都会拼成一条 system 消息放在最前面提交。</p>
+
+  <h2>1. 配置（可注册时写死，也可下方填写后在「发送」时传入）</h2>
+
+  <div class="block">
+    <label>系统提示 systemPrompt：</label>
+    <textarea id="systemPrompt" rows="2" placeholder="例如：你是一个商品搜索助手，只返回与商品相关的信息。">你是一个简洁的助手。请严格按下方要求的格式返回。</textarea>
+    <div class="hint">每次请求都会作为第一条消息（role: system）放在最前面。</div>
+  </div>
+
+  <div class="block">
+    <label>返回格式 responseFormat：</label>
+    <input type="text" id="responseFormat" value="json" placeholder="例如：json" />
+  </div>
+
+  <div class="block">
+    <label>返回格式样例 responseFormatExample：</label>
+    <textarea id="responseFormatExample" rows="3" placeholder="例如：{\"items\": [{\"name\": \"xxx\", \"price\": 99}]}">{"reply": "你的回复内容", "success": true}</textarea>
+  </div>
+
+  <div class="block">
+    <label>函数列表 functions（JSON 对象）：</label>
+    <textarea id="functionsJson" rows="4" placeholder='{"方法名": {"name": "方法名", "description": "描述"}}'>{
+  "addToCart": { "name": "addToCart", "description": "将商品加入购物车" },
+  "getDetail": { "name": "getDetail", "description": "获取商品详情" }
+}</textarea>
+    <div class="hint">对象格式：{ "方法名": { "name", "description" } }，description 必填，name 可省略（用 key）。</div>
+  </div>
+
+  <h2>2. 发送对话</h2>
+
+  <div class="block">
+    <label>用户输入（prompt）：</label>
+    <input type="text" id="promptInput" value="你好，请用 JSON 回复" placeholder="输入内容" />
+  </div>
+
+  <div class="block row">
+    <span>适配器：</span>
+    <select id="adapterType">
+      <option value="mock">Mock（不请求真实接口，仅演示 system 消息已带上）</option>
+      <option value="local">本地接口（需配置 apiUrl）</option>
+    </select>
+    <button onclick="sendChat()">发送</button>
+    <button onclick="clearResult()">清空结果</button>
+  </div>
+
+  <div class="block">
+    <label>返回内容：</label>
+    <div id="resultContainer" class="result">（结果将显示在这里。使用 Mock 时会显示本次请求中 system 消息的摘要。）</div>
+  </div>
+
+  <script src="../src/ai-web-sdk.js"></script>
+  <script src="api-adapter-example.js"></script>
+  <script>
+    var sdk = window.AIWebSDK;
+
+    // 根据选择切换适配器
+    function getAdapter() {
+      var type = document.getElementById('adapterType').value;
+      if (type === 'local') {
+        return AIWebSDKAdapters.createLocalChatAdapter({
+          apiUrl: 'http://localhost:8080/aiProject/api/llm/chat',
+          maxTokens: 2048,
+          temperature: 0.7
+        });
+      }
+      // Mock：把收到的 messages 里第一条 system 消息和最后一条 user 消息摘要返回，便于验证
+      return {
+        request: function (params) {
+          var messages = params.messages || [];
+          var systemMsg = messages[0] && messages[0].role === 'system' ? messages[0].content : '';
+          var lastUser = messages[messages.length - 1];
+          var userText = lastUser && lastUser.role === 'user' ? lastUser.content : '';
+          var systemPreview = systemMsg ? systemMsg.substring(0, 200) + (systemMsg.length > 200 ? '...' : '') : '（无）';
+          var reply = '[Mock 回复] 本次请求已附带 system 消息。\n\n【本次 system 内容预览（前 200 字）】\n' + systemPreview + '\n\n【用户输入】\n' + userText + '\n\n（若使用真实接口，AI 会按上述 system 要求与格式回复。）';
+          return Promise.resolve(reply);
+        }
+      };
+    }
+
+    function getOptionsFromForm() {
+      var systemPrompt = document.getElementById('systemPrompt').value.trim();
+      var responseFormat = document.getElementById('responseFormat').value.trim();
+      var responseFormatExample = document.getElementById('responseFormatExample').value.trim();
+      var functionsJson = document.getElementById('functionsJson').value.trim();
+      var functions = null;
+      if (functionsJson) {
+        try {
+          functions = JSON.parse(functionsJson);
+        } catch (e) {
+          console.warn('functions JSON 解析失败', e);
+        }
+      }
+      return {
+        systemPrompt: systemPrompt || undefined,
+        responseFormat: responseFormat || undefined,
+        responseFormatExample: responseFormatExample || undefined,
+        functions: functions
+      };
+    }
+
+    sdk.setApiAdapter(getAdapter());
+
+    // 注册一个聊天方法，默认不用上下文，每次从表单取 systemPrompt 等传入
+    sdk.register('chat', {
+      useContext: 0
+    });
+
+    function sendChat() {
+      sdk.setApiAdapter(getAdapter());
+      var prompt = document.getElementById('promptInput').value.trim();
+      var resultEl = document.getElementById('resultContainer');
+      var opts = getOptionsFromForm();
+      resultEl.textContent = '请求中...';
+      sdk.chat({
+        prompt: prompt,
+        systemPrompt: opts.systemPrompt,
+        responseFormat: opts.responseFormat,
+        responseFormatExample: opts.responseFormatExample,
+        functions: opts.functions,
+        callback: function (content) {
+          resultEl.textContent = content;
+        }
+      }).catch(function (err) {
+        resultEl.textContent = '请求失败: ' + (err && err.message ? err.message : err);
+      });
+    }
+
+    function clearResult() {
+      document.getElementById('resultContainer').textContent = '（结果已清空）';
+    }
+  </script>
+</body>
+</html>

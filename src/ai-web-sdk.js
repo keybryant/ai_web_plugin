@@ -50,6 +50,51 @@ var aiWebSdk = aiWebSdkFactory(typeof window !== 'undefined' ? window : this, fu
   }
 
   /**
+   * 根据配置构建完整的 systemPrompt（用户 systemPrompt + 返回格式 + 格式样例 + 函数列表）
+   * @param {Object} merged 合并后的配置（register 配置 + 本次调用选项）
+   * @returns {string} 拼接后的系统提示，无内容时返回空字符串
+   */
+  function buildSystemPrompt(merged) {
+    var parts = [];
+    var systemPrompt = merged.systemPrompt;
+    if (systemPrompt != null && String(systemPrompt).trim()) {
+      parts.push(String(systemPrompt).trim());
+    }
+    var responseFormat = merged.responseFormat;
+    if (responseFormat != null && String(responseFormat).trim()) {
+      parts.push('请严格按照以下格式返回：' + String(responseFormat).trim());
+    }
+    var responseFormatExample = merged.responseFormatExample;
+    if (responseFormatExample != null && String(responseFormatExample).trim()) {
+      parts.push('返回格式样例：\n' + String(responseFormatExample).trim());
+    }
+    var functions = merged.functions;
+    if (functions != null && typeof functions === 'object') {
+      var list = Array.isArray(functions) ? functions : [];
+      if (!Array.isArray(functions)) {
+        for (var key in functions) {
+          if (functions.hasOwnProperty(key)) {
+            var fn = functions[key];
+            var name = (fn && fn.name != null) ? String(fn.name) : key;
+            var desc = (fn && fn.description != null) ? String(fn.description) : '';
+            list.push({ name: name, description: desc });
+          }
+        }
+      }
+      if (list.length > 0) {
+        parts.push('可用函数列表（name 为方法名，description 为描述）：');
+        for (var i = 0; i < list.length; i++) {
+          var item = list[i];
+          var n = (item && item.name != null) ? String(item.name) : '';
+          var d = (item && item.description != null) ? String(item.description) : '';
+          parts.push('- name: ' + n + ', description: ' + d);
+        }
+      }
+    }
+    return parts.join('\n\n');
+  }
+
+  /**
    * 获取当前方法的上下文消息列表（仅当 useContext === 1 时）
    */
   function getContextMessages(methodName, useContext) {
@@ -79,7 +124,7 @@ var aiWebSdk = aiWebSdkFactory(typeof window !== 'undefined' ? window : this, fu
   /**
    * 执行一次 AI 调用
    * @param {string} methodName 注册的方法名
-   * @param {string|Object} promptOrOptions 用户传入的 prompt 字符串，或 { prompt, callback?, useContext? } 等
+   * @param {string|Object} promptOrOptions 用户传入的 prompt 字符串，或 { prompt, callback?, useContext?, systemPrompt?, responseFormat?, responseFormatExample?, functions? } 等
    * @returns {Promise<string>} 返回 AI 回复内容
    */
   function runMethod(methodName, promptOrOptions) {
@@ -100,6 +145,11 @@ var aiWebSdk = aiWebSdkFactory(typeof window !== 'undefined' ? window : this, fu
     var processedPrompt = processPrompt(rawPrompt, merged, methodName);
     var contextMessages = getContextMessages(methodName, useContext);
     var messages = [];
+    // 若指定了 systemPrompt / 返回格式 / 格式样例 / 函数列表，拼成系统提示并放在最前面，每次请求都会带上
+    var systemContent = buildSystemPrompt(merged);
+    if (systemContent) {
+      messages.push({ role: 'system', content: systemContent });
+    }
     for (var i = 0; i < contextMessages.length; i++) {
       messages.push(contextMessages[i]);
     }
@@ -125,6 +175,10 @@ var aiWebSdk = aiWebSdkFactory(typeof window !== 'undefined' ? window : this, fu
    * @param {Function} [config.promptProcessor] 可选，处理 prompt 的方法 (rawContent, methodName, config) => string
    * @param {Function} [config.callback] 可选，返回内容的回调 (content, methodName, config) => void，也可在调用时传入
    * @param {number} [config.useContext=1] 1 使用上下文，0 不使用
+   * @param {string} [config.systemPrompt] 可选，系统提示，每次请求都会放在消息最前面
+   * @param {string} [config.responseFormat] 可选，要求返回的格式（如 "json"），会拼入 systemPrompt
+   * @param {string} [config.responseFormatExample] 可选，返回格式的样例，会拼入 systemPrompt
+   * @param {Object|Array} [config.functions] 可选，函数列表，格式为 { name: { name, description } } 或 [{ name, description }]，会拼入 systemPrompt
    */
   function register(methodName, config) {
     if (!methodName || typeof methodName !== 'string') {
@@ -311,5 +365,4 @@ var aiWebSdk = aiWebSdkFactory(typeof window !== 'undefined' ? window : this, fu
   return sdk;
 });
 
-// 供 Vite/ESM 使用
-export default aiWebSdk;
+// 通过 script 引入时挂到 global.AIWebSDK；Vite/ESM 可通过 window.AIWebSDK 或 module.exports 使用
